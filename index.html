@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Турнирная сетка — Фиджитал Бильярд</title>
+<style>
+  /* ====== ЭКРАН ПАБЛИКА: 2688 × 1080 ====== */
+  :root{
+    --stage-w: 2688px;
+    --stage-h: 1080px;
+    --cyan:   #22e6ff;
+    --green:  #2bff9a;   /* цифровая матрица / сукно */
+    --gold:   #ffd451;   /* финал */
+    --ink:    #eafcff;
+    --dim:    #8fb4c4;
+    --slot-bg: rgba(4,20,14,0.62);
+    --slot-bd: rgba(120,240,200,0.42);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:#05090d;overflow:hidden;font-family:"Segoe UI",-apple-system,"Helvetica Neue",Arial,sans-serif}
+
+  /* сцена фиксированного размера — VMix рендерит её 1:1, в браузере авто-масштаб */
+  #stage{
+    position:relative;
+    width:var(--stage-w); height:var(--stage-h);
+    transform-origin:top left;
+    color:var(--ink);
+    /* ФОН — фирменное сукно с эмблемой, 2688×1080 */
+    background:url("bg-bracket.png") center/cover no-repeat, #0c2a1f;
+  }
+
+  /* ---------- Заголовок ---------- */
+  #head{position:absolute;top:44px;left:0;width:100%;text-align:center;z-index:5}
+  #head .kicker{
+    font-size:30px;letter-spacing:14px;font-weight:600;color:var(--cyan);
+    text-transform:uppercase;opacity:.9;
+    text-shadow:0 0 22px rgba(34,230,255,.5);
+  }
+  #head .title{
+    font-size:82px;font-weight:800;letter-spacing:4px;margin-top:6px;
+    text-transform:uppercase;
+    background:linear-gradient(90deg,var(--cyan),#ffffff 45%,var(--green));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 0 40px rgba(34,230,255,.25);
+  }
+  #head .sub{font-size:28px;color:var(--dim);margin-top:4px;letter-spacing:2px}
+
+  /* ---------- SVG-коннекторы ---------- */
+  #wires{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
+
+  /* ---------- Плашка матча ---------- */
+  .match{position:absolute;z-index:3}
+  .m-label{
+    font-size:20px;letter-spacing:3px;color:var(--dim);
+    text-transform:uppercase;font-weight:600;
+    height:30px;line-height:30px;margin-bottom:6px; /* фикс. высота — чтобы все плашки были на одном уровне */
+  }
+  .m-label.right{text-align:right}
+  .slot{
+    display:flex;align-items:center;height:60px;
+    background:var(--slot-bg);
+    border:2px solid var(--slot-bd);
+    backdrop-filter:blur(3px);
+    box-shadow:0 0 18px rgba(34,230,255,.12), inset 0 0 24px rgba(0,0,0,.35);
+  }
+  .slot + .slot{border-top:none}
+  .slot .seed{
+    width:56px;flex:0 0 56px;text-align:center;
+    font-size:26px;font-weight:800;color:var(--cyan);
+    font-family:"Consolas","SF Mono",monospace;
+    border-right:2px solid rgba(34,230,255,.28);
+    line-height:56px;
+  }
+  .slot .name{
+    flex:1;padding:0 22px;font-size:30px;font-weight:700;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .slot .score{
+    width:74px;flex:0 0 74px;text-align:center;
+    font-size:32px;font-weight:800;
+    font-family:"Consolas","SF Mono",monospace;color:var(--ink);
+    border-left:2px solid rgba(34,230,255,.28);line-height:56px;
+  }
+  /* победитель — золото, чтобы не сливаться с зелёным фоном */
+  .slot.win{
+    border-color:var(--gold);
+    box-shadow:0 0 26px rgba(255,212,81,.4), inset 0 0 26px rgba(255,212,81,.08);
+    background:rgba(30,26,6,0.66);
+  }
+  .slot.win .name{color:#fff}
+  .slot.win .seed{color:var(--gold);border-right-color:rgba(255,212,81,.45)}
+  .slot.win .score{color:var(--gold);border-left-color:rgba(255,212,81,.45)}
+  .slot.lose{opacity:.45}
+
+  /* финал — золото */
+  .match.final .slot{border-color:rgba(255,212,81,.55);box-shadow:0 0 30px rgba(255,212,81,.18), inset 0 0 26px rgba(0,0,0,.4)}
+  .match.final .slot .seed,.match.final .slot .score{color:var(--gold);border-color:rgba(255,212,81,.35)}
+  .match.final .slot.win{border-color:var(--gold);box-shadow:0 0 40px rgba(255,212,81,.5);background:rgba(34,28,8,.62)}
+  .match.final .m-label{color:var(--gold);text-align:center;font-size:26px;text-shadow:0 0 20px rgba(255,212,81,.4)}
+
+  /* кубок над финалом */
+  #cup{position:absolute;z-index:4;text-align:center;font-size:70px;filter:drop-shadow(0 0 20px rgba(255,212,81,.6))}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="head">
+    <div class="kicker">Кубок мира · Фиджитал бильярд</div>
+    <div class="title">Турнирная сетка</div>
+    <div class="sub" id="subline">Дисциплина · дата · место проведения</div>
+  </div>
+  <svg id="wires" viewBox="0 0 2688 1080" preserveAspectRatio="none"></svg>
+  <div id="cup">🏆</div>
+</div>
+
+<script>
+/* ============================================================
+   ДАННЫЕ ТУРНИРА  —  правь здесь (или подключи Google Sheets ниже)
+   score: null пока матч не сыгран.  Победитель считается по большему score.
+   ============================================================ */
+const TOURNAMENT = {
+  subline: "Фиджитал бильярд · 24–26 июля · Public Club Billiards",
+
+  // Левая половина
+  L_QF_top:    { label:"Четвертьфинал", p1:{seed:1, name:"Игрок 1", score:null}, p2:{seed:8, name:"Игрок 8", score:null} },
+  L_QF_bot:    { label:"Четвертьфинал", p1:{seed:5, name:"Игрок 5", score:null}, p2:{seed:4, name:"Игрок 4", score:null} },
+  L_SF:        { label:"Полуфинал",     p1:{seed:"", name:"—", score:null},     p2:{seed:"", name:"—", score:null} },
+
+  // Правая половина
+  R_QF_top:    { label:"Четвертьфинал", p1:{seed:3, name:"Игрок 3", score:null}, p2:{seed:6, name:"Игрок 6", score:null} },
+  R_QF_bot:    { label:"Четвертьфинал", p1:{seed:7, name:"Игрок 7", score:null}, p2:{seed:2, name:"Игрок 2", score:null} },
+  R_SF:        { label:"Полуфинал",     p1:{seed:"", name:"—", score:null},     p2:{seed:"", name:"—", score:null} },
+
+  // Финал
+  FINAL:       { label:"Финал",         p1:{seed:"", name:"—", score:null},     p2:{seed:"", name:"—", score:null} },
+};
+
+/* ============================================================
+   ГЕОМЕТРИЯ (координаты плашек на сцене 2688×1080). Правь при подгонке под фон.
+   ============================================================ */
+const W_QF = 430, W_SF = 430, W_FIN = 520, SLOT_H = 60;
+const CX = 1344; // центр сцены
+const POS = {
+  L_QF_top: { x:90,               y:322,  w:W_QF },
+  L_QF_bot: { x:90,               y:772,  w:W_QF },
+  L_SF:     { x:620,              y:547,  w:W_SF },
+  R_QF_top: { x:2688-90-W_QF,     y:322,  w:W_QF },
+  R_QF_bot: { x:2688-90-W_QF,     y:772,  w:W_QF },
+  R_SF:     { x:2688-620-W_SF,    y:547,  w:W_SF },
+  FINAL:    { x:CX-W_FIN/2,       y:547,  w:W_FIN },
+};
+
+/* ---------- построение плашек ---------- */
+function slotHTML(pl, cls){
+  return `<div class="slot ${cls}">
+    <div class="seed">${pl.seed ?? ""}</div>
+    <div class="name">${pl.name ?? "—"}</div>
+    <div class="score">${pl.score==null?"":pl.score}</div>
+  </div>`;
+}
+function winClasses(m){
+  const a=m.p1.score, b=m.p2.score;
+  if(a==null||b==null||a===b) return ["",""];
+  return a>b ? ["win","lose"] : ["lose","win"];
+}
+function renderMatch(key, opts={}){
+  const m = TOURNAMENT[key], p = POS[key];
+  const [c1,c2] = winClasses(m);
+  const labelCls = opts.labelRight ? "m-label right" : "m-label";
+  const el = document.createElement("div");
+  el.className = "match" + (opts.final?" final":"");
+  el.style.left = p.x+"px"; el.style.top = (p.y-34)+"px"; el.style.width = p.w+"px";
+  el.innerHTML =
+    `<div class="${labelCls}">${m.label}</div>` +
+    slotHTML(m.p1,c1) + slotHTML(m.p2,c2);
+  document.getElementById("stage").appendChild(el);
+}
+
+/* ---------- SVG-коннекторы (ступенькой) ---------- */
+function edge(key,side){ // side: 'r' правый край, 'l' левый край; вернёт [x,y] середины плашки
+  const p=POS[key], midY=p.y+SLOT_H; // центр матча по вертикали
+  return side==='r' ? [p.x+p.w, midY] : [p.x, midY];
+}
+function wire(from,to){
+  const midX=(from[0]+to[0])/2;
+  return `M ${from[0]} ${from[1]} H ${midX} V ${to[1]} H ${to[0]}`;
+}
+function buildWires(){
+  const svg=document.getElementById("wires");
+  const paths=[
+    // левая сторона: QF → SF
+    wire(edge("L_QF_top","r"), edge("L_SF","l")),
+    wire(edge("L_QF_bot","r"), edge("L_SF","l")),
+    // левый SF → финал
+    wire(edge("L_SF","r"), edge("FINAL","l")),
+    // правая сторона: QF → SF (в зеркале, от левого края)
+    wire(edge("R_QF_top","l"), edge("R_SF","r")),
+    wire(edge("R_QF_bot","l"), edge("R_SF","r")),
+    // правый SF → финал
+    wire(edge("R_SF","l"), edge("FINAL","r")),
+  ];
+  svg.innerHTML = paths.map(d=>
+    `<path d="${d}" fill="none" stroke="rgba(34,230,255,.45)" stroke-width="3"
+       style="filter:drop-shadow(0 0 6px rgba(34,230,255,.4))"/>`).join("");
+}
+
+/* ---------- отрисовка ---------- */
+function render(){
+  document.querySelectorAll(".match").forEach(e=>e.remove());
+  document.getElementById("subline").textContent = TOURNAMENT.subline;
+  renderMatch("L_QF_top"); renderMatch("L_QF_bot"); renderMatch("L_SF");
+  renderMatch("R_QF_top",{labelRight:true}); renderMatch("R_QF_bot",{labelRight:true}); renderMatch("R_SF",{labelRight:true});
+  renderMatch("FINAL",{final:true});
+  buildWires();
+  // кубок над финалом
+  const f=POS.FINAL, cup=document.getElementById("cup");
+  cup.style.left=(f.x)+"px"; cup.style.top=(f.y-150)+"px"; cup.style.width=f.w+"px";
+}
+
+/* ---------- авто-масштаб для превью в браузере (VMix игнорирует, там 1:1) ---------- */
+function fit(){
+  const s=Math.min(window.innerWidth/2688, window.innerHeight/1080);
+  document.getElementById("stage").style.transform="scale("+s+")";
+}
+window.addEventListener("resize",fit);
+
+/* ============================================================
+   ПОДКЛЮЧЕНИЕ GOOGLE SHEETS (живое обновление) — включить позже.
+   1) Опубликовать таблицу: Файл → Поделиться → Опубликовать в интернете → CSV
+   2) Вставить ссылку в SHEET_CSV, раскомментировать startLiveUpdates()
+   Формат таблицы (пример): по строке на матч, колонки:
+      match_key | seed1 | name1 | score1 | seed2 | name2 | score2
+   ============================================================ */
+const SHEET_CSV = ""; // напр. "https://docs.google.com/.../pub?gid=0&single=true&output=csv"
+async function loadFromSheet(){
+  if(!SHEET_CSV) return;
+  try{
+    const txt = await (await fetch(SHEET_CSV,{cache:"no-store"})).text();
+    const rows = txt.trim().split("\n").slice(1).map(r=>r.split(","));
+    for(const r of rows){
+      const [key,s1,n1,sc1,s2,n2,sc2]=r.map(x=>x.trim());
+      if(!TOURNAMENT[key]) continue;
+      TOURNAMENT[key].p1={seed:s1,name:n1,score:sc1===""?null:+sc1};
+      TOURNAMENT[key].p2={seed:s2,name:n2,score:sc2===""?null:+sc2};
+    }
+    render();
+  }catch(e){ console.warn("sheet load failed",e); }
+}
+function startLiveUpdates(sec=30){ loadFromSheet(); setInterval(loadFromSheet, sec*1000); }
+
+/* старт */
+render(); fit();
+// startLiveUpdates(30);   // ← раскомментировать когда таблица будет готова
+</script>
+</body>
+</html>
