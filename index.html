@@ -25,8 +25,13 @@
     width:var(--stage-w); height:var(--stage-h);
     transform-origin:top left;
     color:var(--ink);
-    /* ФОН — фирменное сукно с эмблемой, 2688×1080 */
+    /* ФОН — заглушка (png), пока грузится видео */
     background:url("bg-bracket.png") center/cover no-repeat, #0c2a1f;
+  }
+  /* видео-фон (зациклен, без звука); под сеткой */
+  #bgvideo{
+    position:absolute; inset:0; z-index:0;
+    width:100%; height:100%; object-fit:cover;
   }
   /* слой сетки — вписан в центральное свободное поле фона (не задевает спонсоров) */
   #board{
@@ -126,6 +131,9 @@
 </head>
 <body>
 <div id="stage">
+  <video id="bgvideo" autoplay muted loop playsinline poster="bg-bracket.png">
+    <source src="bg-bracket.mp4" type="video/mp4">
+  </video>
   <div id="head">
     <div class="kicker">Кубок мира · Фиджитал бильярд</div>
     <div class="title">Турнирная сетка</div>
