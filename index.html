@@ -87,10 +87,23 @@
     box-shadow:0 0 26px rgba(255,212,81,.4), inset 0 0 26px rgba(255,212,81,.08);
     background:rgba(30,26,6,0.66);
   }
-  .slot.win .name{color:#fff}
+  .slot.win .name{color:#fff;font-weight:800}
   .slot.win .seed{color:var(--gold);border-right-color:rgba(255,212,81,.45)}
   .slot.win .score{color:var(--gold);border-left-color:rgba(255,212,81,.45)}
-  .slot.lose{opacity:.45}
+  /* галочка-акцент у победителя пары */
+  .slot.win .name::before{content:"▸ ";color:var(--gold);font-weight:900}
+  .slot.lose{opacity:.4}
+
+  /* медали: бронза (2×3-е место), финал — золото/серебро */
+  .medal{
+    flex:0 0 44px;width:44px;height:44px;margin:0 4px 0 10px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:22px;font-weight:900;font-family:"Consolas","SF Mono",monospace;
+    border:2px solid rgba(255,255,255,.35);
+  }
+  .medal.gold  {background:radial-gradient(circle at 32% 28%,#fff6cf,#ffcb3d 55%,#c9911a);color:#5a3d00;box-shadow:0 0 18px rgba(255,203,61,.75)}
+  .medal.silver{background:radial-gradient(circle at 32% 28%,#ffffff,#d7dde3 55%,#9aa4ad);color:#3a3f45;box-shadow:0 0 16px rgba(210,220,230,.6)}
+  .medal.bronze{background:radial-gradient(circle at 32% 28%,#ffd9a8,#d98a3d 55%,#8a5320);color:#3d2400;box-shadow:0 0 16px rgba(217,138,61,.6)}
 
   /* финал — золото */
   .match.final .slot{border-color:rgba(255,212,81,.55);box-shadow:0 0 30px rgba(255,212,81,.18), inset 0 0 26px rgba(0,0,0,.4)}
@@ -149,7 +162,9 @@ const POS = {
 
 /* ---------- построение плашек ---------- */
 function slotHTML(pl, cls){
+  const medal = pl.medal ? `<div class="medal ${pl.medal.type}">${pl.medal.num}</div>` : "";
   return `<div class="slot ${cls}">
+    ${medal}
     <div class="name">${pl.name || "—"}</div>
     <div class="score">${pl.score==null?"":pl.score}</div>
   </div>`;
@@ -211,6 +226,15 @@ function render(){
   // кубок над финалом
   const f=POS.FINAL, cup=document.getElementById("cup");
   cup.style.left=(f.x)+"px"; cup.style.top=(f.y-150)+"px"; cup.style.width=f.w+"px";
+  fitText();
+}
+
+/* авто-уменьшение шрифта имени, если не влезает в плашку */
+function fitText(){
+  document.querySelectorAll(".slot .name").forEach(el=>{
+    let fs=30; el.style.fontSize=fs+"px";
+    while(el.scrollWidth>el.clientWidth+1 && fs>13){ fs-=1; el.style.fontSize=fs+"px"; }
+  });
 }
 
 /* ---------- авто-масштаб для превью в браузере (VMix игнорирует, там 1:1) ---------- */
@@ -244,6 +268,21 @@ function parseCSV(txt){
 }
 const num = v => (v==null||(""+v).trim()==="") ? null : +(""+v).trim();
 
+// медали: проигравшие полуфиналов → бронза «3» (два 3-х места);
+// финал — победитель золото «1», проигравший серебро «2».
+const real = p => p && p.name && p.name.trim() && p.name!=="—";
+function assignMedals(){
+  for(const k in TOURNAMENT){ const m=TOURNAMENT[k]; if(m.p1)m.p1.medal=null; if(m.p2)m.p2.medal=null; }
+  for(const k of ["L_SF","R_SF"]){
+    const m=TOURNAMENT[k], a=m.p1.score, b=m.p2.score;
+    if(a!=null&&b!=null&&a!==b&&real(m.p1)&&real(m.p2)){ (a<b?m.p1:m.p2).medal={type:"bronze",num:3}; }
+  }
+  const f=TOURNAMENT.FINAL, a=f.p1.score, b=f.p2.score;
+  if(a!=null&&b!=null&&a!==b&&real(f.p1)&&real(f.p2)){
+    (a>b?f.p1:f.p2).medal={type:"gold",num:1};
+    (a>b?f.p2:f.p1).medal={type:"silver",num:2};
+  }
+}
 async function refresh(){
   try{
     const rows = parseCSV(await (await fetch(gviz("judges"),{cache:"no-store"})).text()).slice(1);
@@ -253,14 +292,15 @@ async function refresh(){
       TOURNAMENT[key].p1={ name:(""+(r[1]||"")).trim()||"—", score:num(r[2]) };
       TOURNAMENT[key].p2={ name:(""+(r[4]||"")).trim()||"—", score:num(r[3]) };
     }
+    assignMedals();
     render();
   }catch(e){ console.warn("sheet load failed", e); }
 }
-function startLiveUpdates(sec=10){ refresh(); setInterval(refresh, sec*1000); }
+function startLiveUpdates(sec=1){ refresh(); setInterval(refresh, sec*1000); }
 
 /* старт */
 render(); fit();
-startLiveUpdates(10);   // тянет лист judges каждые 10 с
+startLiveUpdates(1);   // ТЕСТ: обновление раз в 1 с (потом вернуть 10)
 </script>
 </body>
 </html>
