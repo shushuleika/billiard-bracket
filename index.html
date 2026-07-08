@@ -116,10 +116,10 @@
 <script>
 /* ============================================================
    ДАННЫЕ ТУРНИРА
-   Имена участников — лист «data» (посев в кол. A, имя в кол. B).
-   Счёт матчей — лист «scores» (match | score1 | score2).
-   Пары четвертьфиналов заданы посевом в BRACKET.
-   Победители полуфиналов/финала вычисляются кодом по счёту.
+   Сайт читает ТОЛЬКО лист «judges»:
+     match | team1 | s1 | s2 | team2   (по строке на матч).
+   Команды (включая победителей) и счёт приходят готовыми — сетку data
+   и её формулы сайт не трогает.
    ============================================================ */
 const TOURNAMENT = {
   subline: "Фиджитал бильярд · 24–26 июля · Public Club Billiards",
@@ -131,13 +131,6 @@ const TOURNAMENT = {
   R_SF:    { label:"Полуфинал",     p1:{}, p2:{} },
   FINAL:   { label:"Финал",         p1:{}, p2:{} },
 };
-// пары четвертьфиналов по посеву (как в исходной сетке 1-8, 5-4, 3-6, 7-2)
-const BRACKET = {
-  L_QF_top:{s1:1,s2:8}, L_QF_bot:{s1:5,s2:4},
-  R_QF_top:{s1:3,s2:6}, R_QF_bot:{s1:7,s2:2},
-};
-let PLAYERS = {};   // seed -> имя  (из листа data)
-let SCORES  = {};   // match -> {s1,s2}  (из листа scores)
 
 /* ============================================================
    ГЕОМЕТРИЯ (координаты плашек на сцене 2688×1080). Правь при подгонке под фон.
@@ -157,8 +150,7 @@ const POS = {
 /* ---------- построение плашек ---------- */
 function slotHTML(pl, cls){
   return `<div class="slot ${cls}">
-    <div class="seed">${pl.seed ?? ""}</div>
-    <div class="name">${pl.name ?? "—"}</div>
+    <div class="name">${pl.name || "—"}</div>
     <div class="score">${pl.score==null?"":pl.score}</div>
   </div>`;
 }
@@ -231,8 +223,7 @@ window.addEventListener("resize",fit);
 /* ============================================================
    ПОДКЛЮЧЕНИЕ GOOGLE SHEETS (живое обновление)
    Таблица: доступ «Все, у кого есть ссылка → Читатель».
-   Лист «data»   — участники: A=посев(1-8), B=имя.
-   Лист «scores» — счёт: A=match, B=score1, C=score2.
+   Лист «judges»: match | team1 | s1 | s2 | team2.
    ============================================================ */
 const SHEET_ID = "1jvsXYtMonrANlOD0l5vm6NK7JURAx7SG1zbr61RrZQ8";
 const gviz = (sheet)=> `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq`
@@ -253,47 +244,23 @@ function parseCSV(txt){
 }
 const num = v => (v==null||(""+v).trim()==="") ? null : +(""+v).trim();
 
-async function loadData(){                       // имена участников
-  const rows = parseCSV(await (await fetch(gviz("data"),{cache:"no-store"})).text()).slice(1);
-  const m={}; for(const r of rows){ const seed=(""+(r[0]||"")).trim(), name=(""+(r[1]||"")).trim(); if(seed) m[seed]=name||"—"; }
-  PLAYERS=m;
-}
-async function loadScores(){                      // счёт матчей
-  const rows = parseCSV(await (await fetch(gviz("scores"),{cache:"no-store"})).text()).slice(1);
-  const m={}; for(const r of rows){ const k=(""+(r[0]||"")).trim(); if(k) m[k]={s1:num(r[1]), s2:num(r[2])}; }
-  SCORES=m;
-}
-
-// собрать TOURNAMENT из PLAYERS + SCORES + BRACKET
-function slot(seed, score){ return {seed:seed||"", name:seed?(PLAYERS[seed]||"—"):"—", score:score}; }
-function winnerOf(key){ const m=TOURNAMENT[key], a=m.p1.score, b=m.p2.score;
-  if(a==null||b==null||a===b) return {seed:"", name:"—"};
-  return a>b ? {seed:m.p1.seed, name:m.p1.name} : {seed:m.p2.seed, name:m.p2.name};
-}
-function build(){
-  // четвертьфиналы
-  for(const k of ["L_QF_top","L_QF_bot","R_QF_top","R_QF_bot"]){
-    const b=BRACKET[k], sc=SCORES[k]||{};
-    TOURNAMENT[k].p1=slot(b.s1, sc.s1);
-    TOURNAMENT[k].p2=slot(b.s2, sc.s2);
-  }
-  // полуфиналы — победители ЧФ + счёт ПФ
-  const lsf=SCORES.L_SF||{}, rsf=SCORES.R_SF||{}, fin=SCORES.FINAL||{};
-  const w=(k,s)=>{ const x=winnerOf(k); return {seed:x.seed, name:x.name, score:s}; };
-  TOURNAMENT.L_SF.p1=w("L_QF_top", lsf.s1); TOURNAMENT.L_SF.p2=w("L_QF_bot", lsf.s2);
-  TOURNAMENT.R_SF.p1=w("R_QF_top", rsf.s1); TOURNAMENT.R_SF.p2=w("R_QF_bot", rsf.s2);
-  // финал — победители ПФ + счёт финала
-  TOURNAMENT.FINAL.p1=w("L_SF", fin.s1);    TOURNAMENT.FINAL.p2=w("R_SF", fin.s2);
-}
 async function refresh(){
-  try{ await Promise.all([loadData(), loadScores()]); build(); render(); }
-  catch(e){ console.warn("sheet load failed", e); }
+  try{
+    const rows = parseCSV(await (await fetch(gviz("judges"),{cache:"no-store"})).text()).slice(1);
+    for(const r of rows){
+      const key=(""+(r[0]||"")).trim();
+      if(!TOURNAMENT[key]) continue;
+      TOURNAMENT[key].p1={ name:(""+(r[1]||"")).trim()||"—", score:num(r[2]) };
+      TOURNAMENT[key].p2={ name:(""+(r[4]||"")).trim()||"—", score:num(r[3]) };
+    }
+    render();
+  }catch(e){ console.warn("sheet load failed", e); }
 }
-function startLiveUpdates(sec=20){ refresh(); setInterval(refresh, sec*1000); }
+function startLiveUpdates(sec=10){ refresh(); setInterval(refresh, sec*1000); }
 
 /* старт */
 render(); fit();
-startLiveUpdates(20);   // тянет data+scores каждые 20 с
+startLiveUpdates(10);   // тянет лист judges каждые 10 с
 </script>
 </body>
 </html>
