@@ -72,7 +72,7 @@
     line-height:56px;
   }
   .slot .name{
-    flex:1;padding:0 22px;font-size:30px;font-weight:700;
+    flex:1;padding:0 14px;font-size:30px;font-weight:700;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   }
   .slot .score{
@@ -233,7 +233,8 @@ function render(){
 function fitText(){
   document.querySelectorAll(".slot .name").forEach(el=>{
     let fs=30; el.style.fontSize=fs+"px";
-    while(el.scrollWidth>el.clientWidth+1 && fs>13){ fs-=1; el.style.fontSize=fs+"px"; }
+    // scrollWidth > clientWidth = реальное переполнение; уменьшаем только тогда
+    while(el.scrollWidth>el.clientWidth && fs>12){ fs-=0.5; el.style.fontSize=fs+"px"; }
   });
 }
 
