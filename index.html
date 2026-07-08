@@ -115,25 +115,29 @@
 
 <script>
 /* ============================================================
-   ДАННЫЕ ТУРНИРА  —  правь здесь (или подключи Google Sheets ниже)
-   score: null пока матч не сыгран.  Победитель считается по большему score.
+   ДАННЫЕ ТУРНИРА
+   Имена участников — лист «data» (посев в кол. A, имя в кол. B).
+   Счёт матчей — лист «scores» (match | score1 | score2).
+   Пары четвертьфиналов заданы посевом в BRACKET.
+   Победители полуфиналов/финала вычисляются кодом по счёту.
    ============================================================ */
 const TOURNAMENT = {
   subline: "Фиджитал бильярд · 24–26 июля · Public Club Billiards",
-
-  // Левая половина
-  L_QF_top:    { label:"Четвертьфинал", p1:{seed:1, name:"Игрок 1", score:null}, p2:{seed:8, name:"Игрок 8", score:null} },
-  L_QF_bot:    { label:"Четвертьфинал", p1:{seed:5, name:"Игрок 5", score:null}, p2:{seed:4, name:"Игрок 4", score:null} },
-  L_SF:        { label:"Полуфинал",     p1:{seed:"", name:"—", score:null},     p2:{seed:"", name:"—", score:null} },
-
-  // Правая половина
-  R_QF_top:    { label:"Четвертьфинал", p1:{seed:3, name:"Игрок 3", score:null}, p2:{seed:6, name:"Игрок 6", score:null} },
-  R_QF_bot:    { label:"Четвертьфинал", p1:{seed:7, name:"Игрок 7", score:null}, p2:{seed:2, name:"Игрок 2", score:null} },
-  R_SF:        { label:"Полуфинал",     p1:{seed:"", name:"—", score:null},     p2:{seed:"", name:"—", score:null} },
-
-  // Финал
-  FINAL:       { label:"Финал",         p1:{seed:"", name:"—", score:null},     p2:{seed:"", name:"—", score:null} },
+  L_QF_top:{ label:"Четвертьфинал", p1:{}, p2:{} },
+  L_QF_bot:{ label:"Четвертьфинал", p1:{}, p2:{} },
+  L_SF:    { label:"Полуфинал",     p1:{}, p2:{} },
+  R_QF_top:{ label:"Четвертьфинал", p1:{}, p2:{} },
+  R_QF_bot:{ label:"Четвертьфинал", p1:{}, p2:{} },
+  R_SF:    { label:"Полуфинал",     p1:{}, p2:{} },
+  FINAL:   { label:"Финал",         p1:{}, p2:{} },
 };
+// пары четвертьфиналов по посеву (как в исходной сетке 1-8, 5-4, 3-6, 7-2)
+const BRACKET = {
+  L_QF_top:{s1:1,s2:8}, L_QF_bot:{s1:5,s2:4},
+  R_QF_top:{s1:3,s2:6}, R_QF_bot:{s1:7,s2:2},
+};
+let PLAYERS = {};   // seed -> имя  (из листа data)
+let SCORES  = {};   // match -> {s1,s2}  (из листа scores)
 
 /* ============================================================
    ГЕОМЕТРИЯ (координаты плашек на сцене 2688×1080). Правь при подгонке под фон.
@@ -225,32 +229,71 @@ function fit(){
 window.addEventListener("resize",fit);
 
 /* ============================================================
-   ПОДКЛЮЧЕНИЕ GOOGLE SHEETS (живое обновление) — включить позже.
-   1) Опубликовать таблицу: Файл → Поделиться → Опубликовать в интернете → CSV
-   2) Вставить ссылку в SHEET_CSV, раскомментировать startLiveUpdates()
-   Формат таблицы (пример): по строке на матч, колонки:
-      match_key | seed1 | name1 | score1 | seed2 | name2 | score2
+   ПОДКЛЮЧЕНИЕ GOOGLE SHEETS (живое обновление)
+   Таблица: доступ «Все, у кого есть ссылка → Читатель».
+   Лист «data»   — участники: A=посев(1-8), B=имя.
+   Лист «scores» — счёт: A=match, B=score1, C=score2.
    ============================================================ */
-const SHEET_CSV = ""; // напр. "https://docs.google.com/.../pub?gid=0&single=true&output=csv"
-async function loadFromSheet(){
-  if(!SHEET_CSV) return;
-  try{
-    const txt = await (await fetch(SHEET_CSV,{cache:"no-store"})).text();
-    const rows = txt.trim().split("\n").slice(1).map(r=>r.split(","));
-    for(const r of rows){
-      const [key,s1,n1,sc1,s2,n2,sc2]=r.map(x=>x.trim());
-      if(!TOURNAMENT[key]) continue;
-      TOURNAMENT[key].p1={seed:s1,name:n1,score:sc1===""?null:+sc1};
-      TOURNAMENT[key].p2={seed:s2,name:n2,score:sc2===""?null:+sc2};
-    }
-    render();
-  }catch(e){ console.warn("sheet load failed",e); }
+const SHEET_ID = "1jvsXYtMonrANlOD0l5vm6NK7JURAx7SG1zbr61RrZQ8";
+const gviz = (sheet)=> `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq`
+       + `?tqx=out:csv&sheet=${encodeURIComponent(sheet)}&t=${Date.now()}`;
+
+// парсер CSV с поддержкой кавычек и запятых внутри полей
+function parseCSV(txt){
+  const rows=[]; let row=[], cell="", q=false;
+  for(let i=0;i<txt.length;i++){ const c=txt[i];
+    if(q){ if(c==='"'){ if(txt[i+1]==='"'){cell+='"';i++;} else q=false; } else cell+=c; }
+    else { if(c==='"') q=true;
+      else if(c===','){ row.push(cell); cell=""; }
+      else if(c==='\n'||c==='\r'){ if(cell!==""||row.length){ row.push(cell); rows.push(row); row=[]; cell=""; } if(c==='\r'&&txt[i+1]==='\n')i++; }
+      else cell+=c; }
+  }
+  if(cell!==""||row.length){ row.push(cell); rows.push(row); }
+  return rows;
 }
-function startLiveUpdates(sec=30){ loadFromSheet(); setInterval(loadFromSheet, sec*1000); }
+const num = v => (v==null||(""+v).trim()==="") ? null : +(""+v).trim();
+
+async function loadData(){                       // имена участников
+  const rows = parseCSV(await (await fetch(gviz("data"),{cache:"no-store"})).text()).slice(1);
+  const m={}; for(const r of rows){ const seed=(""+(r[0]||"")).trim(), name=(""+(r[1]||"")).trim(); if(seed) m[seed]=name||"—"; }
+  PLAYERS=m;
+}
+async function loadScores(){                      // счёт матчей
+  const rows = parseCSV(await (await fetch(gviz("scores"),{cache:"no-store"})).text()).slice(1);
+  const m={}; for(const r of rows){ const k=(""+(r[0]||"")).trim(); if(k) m[k]={s1:num(r[1]), s2:num(r[2])}; }
+  SCORES=m;
+}
+
+// собрать TOURNAMENT из PLAYERS + SCORES + BRACKET
+function slot(seed, score){ return {seed:seed||"", name:seed?(PLAYERS[seed]||"—"):"—", score:score}; }
+function winnerOf(key){ const m=TOURNAMENT[key], a=m.p1.score, b=m.p2.score;
+  if(a==null||b==null||a===b) return {seed:"", name:"—"};
+  return a>b ? {seed:m.p1.seed, name:m.p1.name} : {seed:m.p2.seed, name:m.p2.name};
+}
+function build(){
+  // четвертьфиналы
+  for(const k of ["L_QF_top","L_QF_bot","R_QF_top","R_QF_bot"]){
+    const b=BRACKET[k], sc=SCORES[k]||{};
+    TOURNAMENT[k].p1=slot(b.s1, sc.s1);
+    TOURNAMENT[k].p2=slot(b.s2, sc.s2);
+  }
+  // полуфиналы — победители ЧФ + счёт ПФ
+  const lsf=SCORES.L_SF||{}, rsf=SCORES.R_SF||{}, fin=SCORES.FINAL||{};
+  const w=(k,s)=>{ const x=winnerOf(k); return {seed:x.seed, name:x.name, score:s}; };
+  TOURNAMENT.L_SF.p1=w("L_QF_top", lsf.s1); TOURNAMENT.L_SF.p2=w("L_QF_bot", lsf.s2);
+  TOURNAMENT.R_SF.p1=w("R_QF_top", rsf.s1); TOURNAMENT.R_SF.p2=w("R_QF_bot", rsf.s2);
+  // финал — победители ПФ + счёт финала
+  TOURNAMENT.FINAL.p1=w("L_SF", fin.s1);    TOURNAMENT.FINAL.p2=w("R_SF", fin.s2);
+}
+async function refresh(){
+  try{ await Promise.all([loadData(), loadScores()]); build(); render(); }
+  catch(e){ console.warn("sheet load failed", e); }
+}
+function startLiveUpdates(sec=20){ refresh(); setInterval(refresh, sec*1000); }
 
 /* старт */
 render(); fit();
-// startLiveUpdates(30);   // ← раскомментировать когда таблица будет готова
+startLiveUpdates(20);   // тянет data+scores каждые 20 с
 </script>
 </body>
 </html>
