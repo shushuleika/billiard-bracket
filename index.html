@@ -28,9 +28,15 @@
     /* ФОН — фирменное сукно с эмблемой, 2688×1080 */
     background:url("bg-bracket.png") center/cover no-repeat, #0c2a1f;
   }
+  /* слой сетки — вписан в центральное свободное поле фона (не задевает спонсоров) */
+  #board{
+    position:absolute; inset:0;
+    transform-origin:1344px 540px;
+    transform:translateY(-45px) scale(0.78);
+  }
 
-  /* ---------- Заголовок ---------- */
-  #head{position:absolute;top:44px;left:0;width:100%;text-align:center;z-index:5}
+  /* ---------- Заголовок (скрыт — на фоне уже есть «ФИДЖИТАЛ БИЛЬЯРД») ---------- */
+  #head{display:none;position:absolute;top:44px;left:0;width:100%;text-align:center;z-index:5}
   #head .kicker{
     font-size:30px;letter-spacing:14px;font-weight:600;color:var(--cyan);
     text-transform:uppercase;opacity:.9;
@@ -54,6 +60,7 @@
     font-size:20px;letter-spacing:3px;color:var(--dim);
     text-transform:uppercase;font-weight:600;
     height:30px;line-height:30px;margin-bottom:6px; /* фикс. высота — чтобы все плашки были на одном уровне */
+    text-shadow:0 2px 8px rgba(0,0,0,.85);
   }
   .m-label.right{text-align:right}
   .slot{
@@ -61,8 +68,10 @@
     background:var(--slot-bg);
     border:2px solid var(--slot-bd);
     backdrop-filter:blur(3px);
-    box-shadow:0 0 18px rgba(34,230,255,.12), inset 0 0 24px rgba(0,0,0,.35);
+    /* тёмная тень — отрывает плашку от анимированного фона */
+    box-shadow:0 0 18px rgba(34,230,255,.12), 0 8px 20px rgba(0,0,0,.55), inset 0 0 24px rgba(0,0,0,.35);
   }
+  .slot .name, .slot .score{text-shadow:0 2px 6px rgba(0,0,0,.8)}
   .slot + .slot{border-top:none}
   .slot .seed{
     width:56px;flex:0 0 56px;text-align:center;
@@ -122,8 +131,10 @@
     <div class="title">Турнирная сетка</div>
     <div class="sub" id="subline">Дисциплина · дата · место проведения</div>
   </div>
-  <svg id="wires" viewBox="0 0 2688 1080" preserveAspectRatio="none"></svg>
-  <div id="cup">🏆</div>
+  <div id="board">
+    <svg id="wires" viewBox="0 0 2688 1080" preserveAspectRatio="none"></svg>
+    <div id="cup">🏆</div>
+  </div>
 </div>
 
 <script>
@@ -184,7 +195,7 @@ function renderMatch(key, opts={}){
   el.innerHTML =
     `<div class="${labelCls}">${m.label}</div>` +
     slotHTML(m.p1,c1) + slotHTML(m.p2,c2);
-  document.getElementById("stage").appendChild(el);
+  document.getElementById("board").appendChild(el);
 }
 
 /* ---------- SVG-коннекторы (ступенькой) ---------- */
