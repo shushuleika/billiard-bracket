@@ -297,11 +297,11 @@ async function refresh(){
     render();
   }catch(e){ console.warn("sheet load failed", e); }
 }
-function startLiveUpdates(sec=1){ refresh(); setInterval(refresh, sec*1000); }
+function startLiveUpdates(sec=3){ refresh(); setInterval(refresh, sec*1000); }
 
 /* старт */
 render(); fit();
-startLiveUpdates(1);   // ТЕСТ: обновление раз в 1 с (потом вернуть 10)
+startLiveUpdates(3);   // обновление раз в 3 с (боевой режим)
 </script>
 </body>
 </html>
