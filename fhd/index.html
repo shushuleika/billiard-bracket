@@ -399,14 +399,13 @@ function startLiveUpdates(sec=3){ refresh(); setInterval(refresh, sec*1000); }
 /* ============================================================
    ТАЙМЕР ОБРАТНОГО ОТСЧЁТА (35 мин), управляется чекбоксом judges!M1.
    Галочка TRUE → таймер показан и идёт; снята/пусто → скрыт и сброшен.
-   Момент старта запоминаем в localStorage — при переоткрытии ТВ отсчёт
-   продолжается с той же точки, а не с начала. ?test в URL — локальный старт
-   для превью без записи в таблицу.
+   Старт фиксируется в момент, когда страница впервые видит галочку TRUE.
+   Чтобы запустить синхронно на всех экранах — ставить/пере-ставить галочку,
+   когда экраны уже открыты (переход FALSE→TRUE они увидят одновременно, ≤3 с).
    ============================================================ */
 const TIMER_MIN = 35;
 const TIMER_CELL = "M1";                 // чекбокс запуска на листе judges
-const TIMER_LS  = "fhd_timer_start_v1";  // ключ localStorage — момент старта (epoch, сек)
-let timerStart = null;                    // epoch(сек) старта; null = скрыт
+let timerStart = null;                    // момент старта (epoch, сек); null = скрыт
 
 async function refreshTimer(){
   try{
@@ -415,14 +414,9 @@ async function refreshTimer(){
     const raw = (await (await fetch(url,{cache:"no-store"})).text()).trim().replace(/^"+|"+$/g,"").trim();
     const on = /^(true|1|да|go|start)$/i.test(raw);   // чекбокс gviz отдаёт TRUE/FALSE
     if(on){
-      if(timerStart==null){                            // только что включили — фиксируем старт
-        const saved = parseFloat(localStorage.getItem(TIMER_LS));
-        timerStart = (!isNaN(saved) && saved>1e9) ? saved : Date.now()/1000;
-        try{ localStorage.setItem(TIMER_LS, timerStart); }catch(e){}
-      }
-    } else {                                           // сняли галочку — скрыть и сбросить
-      timerStart = null;
-      try{ localStorage.removeItem(TIMER_LS); }catch(e){}
+      if(timerStart==null) timerStart = Date.now()/1000; // впервые видим TRUE → старт сейчас
+    } else {
+      timerStart = null;                                 // сняли галочку — скрыть и сбросить
     }
   }catch(e){ /* сеть моргнула — состояние не трогаем */ }
   paintTimer();
@@ -444,7 +438,7 @@ function paintTimer(){
    если задеплоена новая, перезагружаемся ОДИН раз (с cache-bust, мимо CDN).
    В покое (нет деплоя) — не мигает. Экраны/ТВ обновлять вручную не нужно.
    ============================================================ */
-const VERSION = "1784879324";
+const VERSION = "1784879829";
 async function checkVersion(){
   try{
     const v = (await (await fetch("version.txt?t="+Date.now(),{cache:"no-store"})).text()).trim();
