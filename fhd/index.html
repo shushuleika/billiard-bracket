@@ -409,11 +409,6 @@ const TIMER_LS  = "fhd_timer_start_v1";  // ключ localStorage — момен
 let timerStart = null;                    // epoch(сек) старта; null = скрыт
 
 async function refreshTimer(){
-  // тестовый режим: ?test → мгновенный локальный старт, таблицу не трогаем
-  if(new URLSearchParams(location.search).has("test")){
-    if(timerStart==null) timerStart = Date.now()/1000;
-    paintTimer(); return;
-  }
   try{
     const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq`
       + `?tqx=out:csv&sheet=judges&range=${TIMER_CELL}&t=${Date.now()}`;
@@ -449,7 +444,7 @@ function paintTimer(){
    если задеплоена новая, перезагружаемся ОДИН раз (с cache-bust, мимо CDN).
    В покое (нет деплоя) — не мигает. Экраны/ТВ обновлять вручную не нужно.
    ============================================================ */
-const VERSION = "1784878767";
+const VERSION = "1784879324";
 async function checkVersion(){
   try{
     const v = (await (await fetch("version.txt?t="+Date.now(),{cache:"no-store"})).text()).trim();
