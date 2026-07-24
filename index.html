@@ -25,13 +25,8 @@
     width:var(--stage-w); height:var(--stage-h);
     transform-origin:top left;
     color:var(--ink);
-    /* ФОН — заглушка (png), пока грузится видео */
-    background:url("bg-bracket.png") center/cover no-repeat, #0c2a1f;
-  }
-  /* видео-фон (зациклен, без звука); под сеткой */
-  #bgvideo{
-    position:absolute; inset:0; z-index:0;
-    width:100%; height:100%; object-fit:cover;
+    /* ФОН таблицы — статичная картинка 2688×1080 */
+    background:url("bg-table.png") center/cover no-repeat, #0c2a1f;
   }
   /* слой сетки — вписан в центральное свободное поле фона (не задевает спонсоров) */
   #board{
@@ -132,13 +127,30 @@
 
   /* кубок над финалом */
   #cup{position:absolute;z-index:4;text-align:center;font-size:70px;filter:drop-shadow(0 0 20px rgba(255,212,81,.6))}
+
+  /* ---------- Кнопка «Скачать» (в скриншот НЕ попадает) ---------- */
+  /* появляется при движении мыши, прячется в простое → на VMix-фиде (мыши нет) её не видно */
+  #dlwrap{
+    position:fixed; right:22px; bottom:20px; z-index:9999;
+    opacity:0; transition:opacity .35s ease; pointer-events:none;
+  }
+  #dlbtn{
+    display:inline-flex; align-items:center; gap:9px;
+    padding:11px 20px; border-radius:11px; cursor:pointer;
+    font-family:"Segoe UI",Arial,sans-serif; font-size:17px; font-weight:700; letter-spacing:1px;
+    color:#eafcff; background:rgba(8,26,20,.82); border:2px solid rgba(120,240,200,.55);
+    box-shadow:0 6px 20px rgba(0,0,0,.55), 0 0 16px rgba(34,230,255,.18);
+    backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+    transition:background .2s, border-color .2s, transform .1s;
+  }
+  #dlbtn svg{width:19px;height:19px;fill:none;stroke:#2bff9a;stroke-width:2.2}
+  #dlbtn:hover{background:rgba(14,44,34,.95); border-color:var(--green)}
+  #dlbtn:active{transform:translateY(1px)}
+  #dlbtn[disabled]{opacity:.6; cursor:default}
 </style>
 </head>
 <body>
 <div id="stage">
-  <video id="bgvideo" autoplay muted loop playsinline poster="bg-bracket.png">
-    <source src="bg-bracket.mp4" type="video/mp4">
-  </video>
   <div id="head">
     <div class="kicker">Кубок мира · Фиджитал бильярд</div>
     <div class="title">Турнирная сетка</div>
@@ -150,6 +162,15 @@
   </div>
 </div>
 
+<!-- Кнопка скачивания (в скриншот не попадает) -->
+<div id="dlwrap">
+  <button id="dlbtn" title="Скачать текущую таблицу в PNG (2688×1080)">
+    <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M5 20h14" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    СКАЧАТЬ
+  </button>
+</div>
+
+<script src="html2canvas.min.js"></script>
 <script>
 /* ============================================================
    ДАННЫЕ ТУРНИРА
@@ -349,6 +370,61 @@ async function refresh(){
   }catch(e){ console.warn("sheet load failed", e); }
 }
 function startLiveUpdates(sec=3){ refresh(); setInterval(refresh, sec*1000); }
+
+/* ============================================================
+   СКАЧИВАНИЕ ТЕКУЩЕЙ ТАБЛИЦЫ В PNG (ровно 2688×1080, БЕЗ кнопки)
+   html2canvas снимает сцену целиком (фон-картинка + сетка). Размер фиксируем
+   на нативные 2688×1080 независимо от масштаба превью в браузере.
+   ============================================================ */
+async function captureBracket(){
+  const W = 2688, H = 1080;
+  const stage = document.getElementById("stage");
+  return await html2canvas(stage, {
+    backgroundColor: "#05090d",
+    width: W, height: H, windowWidth: W, windowHeight: H,
+    scale: 1, useCORS: true, logging: false,
+    ignoreElements: (el)=> el.id === "dlwrap",   // кнопку в кадр не берём
+    onclone: (doc)=>{
+      const st = doc.getElementById("stage");
+      if(st) st.style.transform = "none";        // снимаем превью-масштаб → полный 2688×1080
+    }
+  });
+}
+function tsName(){
+  const d = new Date(), p = n => (""+n).padStart(2,"0");
+  return `сетка-фиджитал-${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.png`;
+}
+async function downloadBracket(){
+  const btn = document.getElementById("dlbtn");
+  const old = btn.innerHTML;
+  btn.disabled = true; btn.textContent = "Готовлю…";
+  try{
+    const canvas = await captureBracket();
+    await new Promise(res => canvas.toBlob(blob=>{
+      const a = document.createElement("a");
+      a.download = tsName();
+      a.href = URL.createObjectURL(blob);
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+      res();
+    }, "image/png"));
+  }catch(e){ console.error(e); alert("Не удалось сохранить: " + e); }
+  finally{ btn.disabled = false; btn.innerHTML = old; }
+}
+document.getElementById("dlbtn").addEventListener("click", downloadBracket);
+
+/* кнопка видна только при движении мыши и прячется в простое →
+   на VMix-фиде (мыши нет) она не появляется, скриншот и трансляция чистые */
+(function(){
+  const wrap = document.getElementById("dlwrap");
+  let t;
+  function show(){ wrap.style.opacity = "1"; wrap.style.pointerEvents = "auto";
+    clearTimeout(t); t = setTimeout(hide, 2800); }
+  function hide(){ wrap.style.opacity = "0"; wrap.style.pointerEvents = "none"; }
+  window.addEventListener("mousemove", show);
+  window.addEventListener("touchstart", show, {passive:true});
+  show();  // показать на пару секунд при загрузке
+})();
 
 /* старт */
 render(); fit();
