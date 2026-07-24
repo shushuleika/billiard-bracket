@@ -279,10 +279,14 @@ function fitText(){
   });
 }
 
-/* ---------- авто-масштаб для превью в браузере (VMix/OBS игнорируют, там 1:1) ---------- */
+/* ---------- растяжение на весь экран/окно ----------
+   Заполняем весь viewport по обеим осям (без чёрных полос). На 16:9-экране
+   (телевизор 1920×1080) scaleX==scaleY → пропорции сохраняются 1:1; на ином
+   соотношении картинка слегка тянется, но полей по краям не остаётся. */
 function fit(){
-  const s=Math.min(window.innerWidth/1920, window.innerHeight/1080);
-  document.getElementById("stage").style.transform="scale("+s+")";
+  const st=document.getElementById("stage");
+  st.style.transformOrigin="top left";
+  st.style.transform="scale("+(window.innerWidth/1920)+","+(window.innerHeight/1080)+")";
 }
 window.addEventListener("resize",fit);
 
