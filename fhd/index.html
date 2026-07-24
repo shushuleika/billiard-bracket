@@ -132,6 +132,34 @@
 
   /* кубок над финалом */
   #cup{position:absolute;z-index:4;text-align:center;font-size:70px;filter:drop-shadow(0 0 20px rgba(255,212,81,.6))}
+
+  /* ---------- Таймер обратного отсчёта (верхний правый угол) ---------- */
+  #timer{
+    position:absolute; top:34px; right:46px; z-index:30;
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    padding:12px 30px 14px; border-radius:16px;
+    background:rgba(4,20,14,0.74);
+    border:2px solid var(--slot-bd);
+    box-shadow:0 0 26px rgba(34,230,255,.18), 0 10px 26px rgba(0,0,0,.55), inset 0 0 26px rgba(0,0,0,.35);
+    backdrop-filter:blur(4px);
+  }
+  #timer.hidden{display:none}
+  #timer .t-cap{
+    font-size:16px; letter-spacing:5px; font-weight:700; text-transform:uppercase;
+    color:var(--cyan); opacity:.85; text-shadow:0 0 10px rgba(34,230,255,.5);
+  }
+  #timer .t-val{
+    font-family:"Consolas","SF Mono",monospace; font-weight:800;
+    font-size:64px; line-height:1.02; letter-spacing:2px; color:var(--ink);
+    font-variant-numeric:tabular-nums;
+    text-shadow:0 2px 10px rgba(0,0,0,.7), 0 0 22px rgba(34,230,255,.22);
+  }
+  #timer.t-warn{border-color:var(--gold)}
+  #timer.t-warn .t-val{color:var(--gold); text-shadow:0 0 22px rgba(255,212,81,.5)}
+  #timer.t-warn .t-cap{color:var(--gold)}
+  #timer.t-end{border-color:#ff5a5a}
+  #timer.t-end .t-val{color:#ff5a5a; text-shadow:0 0 22px rgba(255,90,90,.55)}
+  #timer.t-end .t-cap{color:#ff5a5a}
 </style>
 </head>
 <body>
@@ -144,6 +172,10 @@
   <div id="board">
     <svg id="wires" viewBox="0 0 2688 1080" preserveAspectRatio="none"></svg>
     <div id="cup">🏆</div>
+  </div>
+  <div id="timer" class="hidden">
+    <div class="t-cap">До конца</div>
+    <div class="t-val">35:00</div>
   </div>
 </div>
 
@@ -354,9 +386,72 @@ async function refresh(){
 }
 function startLiveUpdates(sec=3){ refresh(); setInterval(refresh, sec*1000); }
 
+/* ============================================================
+   ТАЙМЕР ОБРАТНОГО ОТСЧЁТА (35 мин), управляется чекбоксом judges!M1.
+   Галочка TRUE → таймер показан и идёт; снята/пусто → скрыт и сброшен.
+   Момент старта запоминаем в localStorage — при переоткрытии ТВ отсчёт
+   продолжается с той же точки, а не с начала. ?test в URL — локальный старт
+   для превью без записи в таблицу.
+   ============================================================ */
+const TIMER_MIN = 35;
+const TIMER_CELL = "M1";                 // чекбокс запуска на листе judges
+const TIMER_LS  = "fhd_timer_start_v1";  // ключ localStorage — момент старта (epoch, сек)
+let timerStart = null;                    // epoch(сек) старта; null = скрыт
+
+async function refreshTimer(){
+  // тестовый режим: ?test → мгновенный локальный старт, таблицу не трогаем
+  if(new URLSearchParams(location.search).has("test")){
+    if(timerStart==null) timerStart = Date.now()/1000;
+    paintTimer(); return;
+  }
+  try{
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq`
+      + `?tqx=out:csv&sheet=judges&range=${TIMER_CELL}&t=${Date.now()}`;
+    const raw = (await (await fetch(url,{cache:"no-store"})).text()).trim().replace(/^"+|"+$/g,"").trim();
+    const on = /^(true|1|да|go|start)$/i.test(raw);   // чекбокс gviz отдаёт TRUE/FALSE
+    if(on){
+      if(timerStart==null){                            // только что включили — фиксируем старт
+        const saved = parseFloat(localStorage.getItem(TIMER_LS));
+        timerStart = (!isNaN(saved) && saved>1e9) ? saved : Date.now()/1000;
+        try{ localStorage.setItem(TIMER_LS, timerStart); }catch(e){}
+      }
+    } else {                                           // сняли галочку — скрыть и сбросить
+      timerStart = null;
+      try{ localStorage.removeItem(TIMER_LS); }catch(e){}
+    }
+  }catch(e){ /* сеть моргнула — состояние не трогаем */ }
+  paintTimer();
+}
+function paintTimer(){
+  const el = document.getElementById("timer");
+  if(timerStart==null){ el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  let rem = Math.round(TIMER_MIN*60 - (Date.now()/1000 - timerStart));
+  if(rem<0) rem=0;
+  const m=Math.floor(rem/60), s=rem%60;
+  el.querySelector(".t-val").textContent = `${m}:${String(s).padStart(2,"0")}`;
+  el.classList.toggle("t-warn", rem>0 && rem<=60);     // последняя минута — жёлтым
+  el.classList.toggle("t-end",  rem===0);              // ноль — красным
+}
+
+/* ============================================================
+   АВТООБНОВЛЕНИЕ КОДА: раз в 10 с сверяем version.txt со своей версией и,
+   если задеплоена новая, перезагружаемся ОДИН раз (с cache-bust, мимо CDN).
+   В покое (нет деплоя) — не мигает. Экраны/ТВ обновлять вручную не нужно.
+   ============================================================ */
+const VERSION = "1784873861";
+async function checkVersion(){
+  try{
+    const v = (await (await fetch("version.txt?t="+Date.now(),{cache:"no-store"})).text()).trim();
+    if(v && v!==VERSION) location.replace(location.pathname + "?v=" + encodeURIComponent(v));
+  }catch(e){ /* нет сети — просто ждём следующей проверки */ }
+}
+
 /* старт */
 render(); fit();
-startLiveUpdates(3);   // обновление раз в 3 с (боевой режим)
+startLiveUpdates(3);   // сетка — обновление раз в 3 с (боевой режим)
+refreshTimer(); setInterval(refreshTimer, 3000); setInterval(paintTimer, 250);
+checkVersion(); setInterval(checkVersion, 10000);
 </script>
 </body>
 </html>
