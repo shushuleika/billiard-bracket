@@ -242,10 +242,20 @@ function slotHTML(pl, cls){
     <div class="score">${scoreHTML(pl.display)}</div>
   </div>`;
 }
-function winClasses(m){
+// кто выше: 1 — p1, 2 — p2, 0 — победитель не определён.
+// Сначала по сумме (цифра+стол); при РАВНОЙ сумме — тай-брейк по счёту на столе (I/J).
+// Если и стол равный — 0 (совсем ничья, крайне редко). То же правило, что и в формулах листа data.
+function cmp(m){
   const a=m.p1.score, b=m.p2.score;
-  if(a==null||b==null||a===b) return ["",""];
-  return a>b ? ["win","lose"] : ["lose","win"];
+  if(a==null||b==null) return 0;
+  if(a!==b) return a>b ? 1 : 2;
+  const ta=m.p1.table, tb=m.p2.table;      // ничья по сумме → решает стол
+  if(ta==null||tb==null||ta===tb) return 0;
+  return ta>tb ? 1 : 2;
+}
+function winClasses(m){
+  const w=cmp(m);
+  return w===0 ? ["",""] : (w===1 ? ["win","lose"] : ["lose","win"]);
 }
 function renderMatch(key, opts={}){
   const m = TOURNAMENT[key], p = POS[key];
@@ -355,13 +365,13 @@ const real = p => p && p.name && p.name.trim() && p.name!=="—";
 function assignMedals(){
   for(const k in TOURNAMENT){ const m=TOURNAMENT[k]; if(m.p1)m.p1.medal=null; if(m.p2)m.p2.medal=null; }
   for(const k of ["L_SF","R_SF"]){
-    const m=TOURNAMENT[k], a=m.p1.score, b=m.p2.score;
-    if(m.done&&a!=null&&b!=null&&a!==b&&real(m.p1)&&real(m.p2)){ (a<b?m.p1:m.p2).medal={type:"bronze",num:3}; }
+    const m=TOURNAMENT[k], w=cmp(m);            // проигравший полуфинала → бронза (2×3-е место)
+    if(m.done&&w&&real(m.p1)&&real(m.p2)){ (w===1?m.p2:m.p1).medal={type:"bronze",num:3}; }
   }
-  const f=TOURNAMENT.FINAL, a=f.p1.score, b=f.p2.score;
-  if(f.done&&a!=null&&b!=null&&a!==b&&real(f.p1)&&real(f.p2)){
-    (a>b?f.p1:f.p2).medal={type:"gold",num:1};
-    (a>b?f.p2:f.p1).medal={type:"silver",num:2};
+  const f=TOURNAMENT.FINAL, w=cmp(f);            // финал: победитель — золото, проигравший — серебро
+  if(f.done&&w&&real(f.p1)&&real(f.p2)){
+    (w===1?f.p1:f.p2).medal={type:"gold",num:1};
+    (w===1?f.p2:f.p1).medal={type:"silver",num:2};
   }
 }
 async function refresh(){
@@ -375,8 +385,8 @@ async function refresh(){
       const d1=num(r[5]), t1=num(r[8]), d2=num(r[6]), t2=num(r[9]);
       const score1 = (d1==null&&t1==null) ? null : (d1||0)+(t1||0);
       const score2 = (d2==null&&t2==null) ? null : (d2||0)+(t2||0);
-      TOURNAMENT[key].p1={ name:(""+(r[1]||"")).trim()||"—", score:score1, display:(""+(r[2]||"")).trim() };
-      TOURNAMENT[key].p2={ name:(""+(r[4]||"")).trim()||"—", score:score2, display:(""+(r[3]||"")).trim() };
+      TOURNAMENT[key].p1={ name:(""+(r[1]||"")).trim()||"—", score:score1, table:t1, display:(""+(r[2]||"")).trim() };
+      TOURNAMENT[key].p2={ name:(""+(r[4]||"")).trim()||"—", score:score2, table:t2, display:(""+(r[3]||"")).trim() };
       // колонка K (индекс 10) — чекбокс "матч завершён" (цифра+стол обе фазы сыграны)
       TOURNAMENT[key].done = (""+(r[10]||"")).trim().toUpperCase()==="TRUE";
     }
@@ -439,7 +449,7 @@ function paintTimer(){
    если задеплоена новая, перезагружаемся ОДИН раз (с cache-bust, мимо CDN).
    В покое (нет деплоя) — не мигает. Экраны/ТВ обновлять вручную не нужно.
    ============================================================ */
-const VERSION = "1784873861";
+const VERSION = "1784878767";
 async function checkVersion(){
   try{
     const v = (await (await fetch("version.txt?t="+Date.now(),{cache:"no-store"})).text()).trim();
